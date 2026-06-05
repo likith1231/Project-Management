@@ -1,7 +1,5 @@
 import { Inngest } from "inngest";
 import prisma from "../configs/prisma.js";
-// import { Prisma } from "@prisma/client";
-// import e from "express";
 
 export const inngest = new Inngest({ id: "project-management" });
 
@@ -30,11 +28,19 @@ const syncUserDeletion = inngest.createFunction(
     },
     async ({ event }) => {
         const { data } = event;
-        await prisma.user.delete({
-            where: {
-                id: data.id,
+        try {
+            await prisma.user.delete({
+                where: {
+                    id: data.id,
+                }
+            });
+        } catch (error) {
+            if (error.code === 'P2025') {
+                console.log("User already deleted or never existed. Ignoring.");
+                return; // Safely ignore
             }
-        });
+            throw error;
+        }
     }
 );
 
@@ -45,16 +51,24 @@ const syncUserUpdation = inngest.createFunction(
     },
     async ({ event }) => {
         const { data } = event;
-        await prisma.user.update({
-            where: {
-                id: data.id
-            },
-            data: {
-                email: data?.email_addresses[0]?.email_address,
-                name: data?.first_name + " " + data?.last_name,
-                image: data?.image_url,
+        try {
+            await prisma.user.update({
+                where: {
+                    id: data.id
+                },
+                data: {
+                    email: data?.email_addresses[0]?.email_address,
+                    name: data?.first_name + " " + data?.last_name,
+                    image: data?.image_url,
+                }
+            });
+        } catch (error) {
+            if (error.code === 'P2025') {
+                console.log("User update arrived before creation. Telling Inngest to retry...");
+                throw new Error("Retrying user update"); // Force a retry
             }
-        });
+            throw error;
+        }
     }
 );
 
@@ -91,7 +105,6 @@ const syncWorkspaceUpdation = inngest.createFunction(
     },
     async ({ event }) => {
         const { data } = event;
-        
         try {
             await prisma.workspace.update({
                 where: {
@@ -104,13 +117,10 @@ const syncWorkspaceUpdation = inngest.createFunction(
                 }
             });
         } catch (error) {
-            // Catch the specific Prisma "Record not found" error
             if (error.code === 'P2025') {
                 console.log("Workspace update arrived before creation. Telling Inngest to retry...");
-                // Throwing a standard error tells Inngest to put it back in the queue and try again later
                 throw new Error("Retrying workspace update");
             }
-            // If it is any other error, throw it normally
             throw error;
         }
     }
@@ -123,7 +133,6 @@ const syncWorkspaceDeletion = inngest.createFunction(
     },
     async ({ event }) => {
         const { data } = event;
-        
         try {
             await prisma.workspace.delete({
                 where: {
@@ -131,18 +140,15 @@ const syncWorkspaceDeletion = inngest.createFunction(
                 }
             });
         } catch (error) {
-            // Catch the specific Prisma "Record not found" error
             if (error.code === 'P2025') {
                 console.log("Workspace already deleted or never existed. Ignoring.");
-                // Notice we do NOT throw an error here! 
-                // We just return safely so Inngest marks the webhook as successful.
                 return; 
             }
-            // If it is a real database crash (like bad connection), throw it normally
             throw error; 
         }
     }
 );
+
 const syncworkspaceMemberCreation = inngest.createFunction(
     {
         id: "sync-workspace-member-from-clerk",
