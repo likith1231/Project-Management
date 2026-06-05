@@ -91,16 +91,28 @@ const syncWorkspaceUpdation = inngest.createFunction(
     },
     async ({ event }) => {
         const { data } = event;
-        await prisma.workspace.update({
-            where: {
-                id: data.id
-            },
-            data: {
-                name: data.name,
-                slug: data.slug,
-                image_url: data.image_url,
+        
+        try {
+            await prisma.workspace.update({
+                where: {
+                    id: data.id
+                },
+                data: {
+                    name: data.name,
+                    slug: data.slug,
+                    image_url: data.image_url,
+                }
+            });
+        } catch (error) {
+            // Catch the specific Prisma "Record not found" error
+            if (error.code === 'P2025') {
+                console.log("Workspace update arrived before creation. Telling Inngest to retry...");
+                // Throwing a standard error tells Inngest to put it back in the queue and try again later
+                throw new Error("Retrying workspace update");
             }
-        });
+            // If it is any other error, throw it normally
+            throw error;
+        }
     }
 );
 
