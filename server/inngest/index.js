@@ -123,14 +123,26 @@ const syncWorkspaceDeletion = inngest.createFunction(
     },
     async ({ event }) => {
         const { data } = event;
-        await prisma.workspace.delete({
-            where: {
-                id: data.id
+        
+        try {
+            await prisma.workspace.delete({
+                where: {
+                    id: data.id
+                }
+            });
+        } catch (error) {
+            // Catch the specific Prisma "Record not found" error
+            if (error.code === 'P2025') {
+                console.log("Workspace already deleted or never existed. Ignoring.");
+                // Notice we do NOT throw an error here! 
+                // We just return safely so Inngest marks the webhook as successful.
+                return; 
             }
-        });
+            // If it is a real database crash (like bad connection), throw it normally
+            throw error; 
+        }
     }
 );
-
 const syncworkspaceMemberCreation = inngest.createFunction(
     {
         id: "sync-workspace-member-from-clerk",
