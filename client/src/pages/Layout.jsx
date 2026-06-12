@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Navbar from '../components/Navbar'
 import Sidebar from '../components/Sidebar'
 import { Outlet } from 'react-router-dom'
@@ -10,10 +10,12 @@ import { fetchWorkspaces } from '../features/workspaceSlice'
 
 const Layout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+    const [sessionReady, setSessionReady] = useState(false)
     const { loading, workspaces } = useSelector((state) => state.workspace)
     const dispatch = useDispatch()
     const { user, isLoaded } = useUser()
-    const { getToken } = useAuth()
+    const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAuth()
+    const hasFetchedRef = useRef(false) // Track if we've already initiated fetch
     
     // Grab the live organization data directly from Clerk
     const { userMemberships, isLoaded: isOrgLoaded } = useOrganizationList({
@@ -25,35 +27,27 @@ const Layout = () => {
         dispatch(loadTheme())
     }, [dispatch])
 
-    // Initial fetch from backend
-    useEffect(() =>{
-        if (isLoaded && user && workspaces.length === 0){
-            dispatch(fetchWorkspaces({ getToken }))
-        }
-    }, [isLoaded, user, dispatch, getToken])
-
-    // Smart Polling: Wait for the database to sync with Clerk
+    // Check if session is ready (both auth and org loaded)
     useEffect(() => {
-        let timeoutId;
-
-        const checkDatabase = async () => {
-            if (userMemberships?.data?.length > 0 && workspaces.length === 0) {
-                console.log("Checking database for new workspace...");
-                
-                await dispatch(fetchWorkspaces({ getToken }));
-                
-                timeoutId = setTimeout(checkDatabase, 3000);
-            }
-        };
-
-        if (userMemberships?.data?.length > 0 && workspaces.length === 0) {
-            timeoutId = setTimeout(checkDatabase, 2000);
+        if (isLoaded && isAuthLoaded && isSignedIn) {
+            setSessionReady(true);
+            console.log("✅ Session ready - can fetch workspaces");
         }
+    }, [isLoaded, isAuthLoaded, isSignedIn])
 
-        return () => {
-            if (timeoutId) clearTimeout(timeoutId);
-        };
-    }, [userMemberships?.data?.length, workspaces.length, dispatch, getToken])
+    // Initial fetch from backend - fetch only once when conditions are met
+    useEffect(() => {
+      if (
+        userMemberships?.data?.length > 0 &&
+        sessionReady &&
+        !hasFetchedRef.current &&
+        !loading
+      ) {
+        hasFetchedRef.current = true;
+        console.log("Fetching workspaces...");
+        dispatch(fetchWorkspaces({ getToken }));
+      }
+    }, [userMemberships?.data?.length, sessionReady, dispatch, getToken, loading]);
 
     if (!isLoaded || !isOrgLoaded) {
         return (
@@ -71,7 +65,7 @@ const Layout = () => {
         )
     }
 
-    if (loading && workspaces.length > 0) return (
+    if (loading && workspaces.length === 0) return (
         <div className='flex items-center justify-center h-screen bg-white dark:bg-zinc-950'>
             <Loader2Icon className="size-7 text-blue-500 animate-spin" />
         </div>

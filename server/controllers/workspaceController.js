@@ -1,32 +1,61 @@
+import prisma from '../configs/prisma.js';
+
 export const getUserWorkspaces = async (req, res) => {
     try {
-        // FIX: req.auth is an object in Express, not a function!
-        const userId = req.auth.userId; 
+        console.log("REQ AUTH:", req.auth);
+        
+        const auth = req.auth;
+        const userId = auth?.userId;
+        const orgId = auth?.orgId;
 
-        // X-Ray Vision: This will print in your VS Code backend terminal
-        console.log("BACKEND DETECTED USER ID:", userId);
+        console.log("BACKEND AUTH:", { userId, orgId, sessionStatus: auth?.sessionStatus });
 
-        if (!userId) {
-            return res.status(401).json({ message: "Unauthorized: No User ID found" });
+        // Try to find workspaces - first by userId, then by orgId
+        let workspaces = [];
+
+        if (userId) {
+            // Standard: find workspaces where user is a member
+            workspaces = await prisma.workspace.findMany({
+                where: {
+                    members: { some: { userId: userId } }
+                },
+                include: {
+                    members: { include: { user: true } },
+                    projects: {
+                        include:{
+                            tasks: { include: { assignee: true, comments: { include: { user: true } } } },
+                            members: { include: { user: true } }
+                        }
+                    },
+                    owner: true
+                }
+            });
+            console.log(`✅ Found ${workspaces.length} workspaces for userId: ${userId}`);
+        } 
+        else if (orgId) {
+            // Fallback: find workspace by orgId (newly created org might only have orgId)
+            workspaces = await prisma.workspace.findMany({
+                where: {
+                    id: orgId
+                },
+                include: {
+                    members: { include: { user: true } },
+                    projects: {
+                        include:{
+                            tasks: { include: { assignee: true, comments: { include: { user: true } } } },
+                            members: { include: { user: true } }
+                        }
+                    },
+                    owner: true
+                }
+            });
+            console.log(`⚠️ Found ${workspaces.length} workspaces for orgId: ${orgId}`);
+        }
+        else {
+            console.warn("❌ No userId or orgId in auth context");
+            return res.status(401).json({ message: "Unauthorized: No user context" });
         }
 
-        const workspaces = await prisma.workspace.findMany({
-            where: {
-                members: { some: { userId: userId } }
-            },
-            include: {
-                members: { include: { user: true } },
-                projects: {
-                    include:{
-                        tasks: { include: { assignee: true, comments: { include: { user: true } } } },
-                        members: { include: { user: true } }
-                    }
-                },
-                owner: true
-            }
-        });
-
-        console.log(`SUCCESS: Found ${workspaces.length} workspaces for user.`);
         res.status(200).json({ workspaces });
 
     } catch (error) {
