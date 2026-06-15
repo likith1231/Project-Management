@@ -11,7 +11,7 @@ export const fetchWorkspaces = createAsyncThunk(
         return [];
       }
 
-      const token = await getToken();
+       const token = await getToken({ skipCache: true });
 
       console.log("========== TOKEN DEBUG ==========");
       console.log("TOKEN:", token);

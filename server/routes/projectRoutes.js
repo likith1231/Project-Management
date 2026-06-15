@@ -5,7 +5,7 @@ import { addMember, createProject, updateProject } from '../controllers/projectC
 const projectRouter = express.Router();
 
 projectRouter.post('/', createProject);
-projectRouter.put('/', updateProject);
+projectRouter.put('/:id', updateProject);
 projectRouter.post('/:projectId/addMember', addMember);
 
 

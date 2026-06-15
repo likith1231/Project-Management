@@ -161,6 +161,34 @@ const syncworkspaceMemberCreation = inngest.createFunction(
   },
   async ({ event }) => {
     const { data } = event;
+    
+    console.log("📨 Invitation accepted:", data);
+
+    // ✅ Wait for user to exist in DB first (they may not be created yet)
+    const user = await prisma.user.findUnique({
+      where: { id: data.user_id }
+    });
+
+    if (!user) {
+      // User not in DB yet - throw to force Inngest retry
+      throw new Error(`User ${data.user_id} not found in DB yet, retrying...`);
+    }
+
+    // ✅ Check if already a member (avoid duplicate error)
+    const existing = await prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId: data.user_id,
+          workspaceId: data.organization_id,
+        }
+      }
+    });
+
+    if (existing) {
+      console.log("Member already exists, skipping");
+      return;
+    }
+
     await prisma.workspaceMember.create({
       data: {
         userId: data.user_id,
@@ -168,6 +196,8 @@ const syncworkspaceMemberCreation = inngest.createFunction(
         role: String(data.role).toUpperCase(),
       },
     });
+    
+    console.log("✅ Workspace member added:", data.user_id);
   },
 );
 

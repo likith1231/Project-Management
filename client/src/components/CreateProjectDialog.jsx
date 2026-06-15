@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { XIcon } from "lucide-react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import  toast  from "react-hot-toast";
+import api from "../configs/api";
+import { useAuth } from "@clerk/react";
+import { addProject } from "../features/workspaceSlice";
 
 const CreateProjectDialog = ({ isDialogOpen, setIsDialogOpen }) => {
+
+    const {getToken} = useAuth()
+    const dispatch = useDispatch()
 
     const { currentWorkspace } = useSelector((state) => state.workspace);
 
@@ -21,9 +28,31 @@ const CreateProjectDialog = ({ isDialogOpen, setIsDialogOpen }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        
-    };
+    e.preventDefault();
+    
+    // ✅ Add this temporarily
+    console.log("currentWorkspace:", currentWorkspace);
+    console.log("workspaceId being sent:", currentWorkspace?.id);
+    try {
+        if (!formData.team_lead) {
+            return toast.error("Please select a project lead.");
+        }
+        setIsSubmitting(true);
+        const token = await getToken();
+        const { data } = await api.post(
+            "/api/projects/",
+            { workspace_id: currentWorkspace.id, ...formData },
+            { headers: { Authorization: `Bearer ${token}` } }  // ✅ fixed
+        );
+        dispatch(addProject(data.project));
+        setIsDialogOpen(false);
+    } catch (error) {
+        toast.error(error?.response?.data?.message || error.message);
+    } finally {
+        setIsSubmitting(false);
+    }
+};
+           
 
     const removeTeamMember = (email) => {
         setFormData((prev) => ({ ...prev, team_members: prev.team_members.filter(m => m !== email) }));
