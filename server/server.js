@@ -13,7 +13,10 @@ const app = express();
 
 // ✅ CORS must come first
 app.use(cors({
-  origin: true,
+  origin: [
+    'http://localhost:5174',
+    'https://project-mgt-client.vercel.app', // ✅ your deployed frontend
+  ],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
